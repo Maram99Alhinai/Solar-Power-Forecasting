@@ -10,7 +10,7 @@ def _parse_args():
     # Data, model, and output directories
     # model_dir is always passed in from SageMaker. By default, this is an S3 path under the default bucket.
     parser.add_argument('--filepath', type=str, default='/opt/ml/processing/input/')
-    parser.add_argument('--filename', type=str, default='bank-additional-full.csv')
+    parser.add_argument('--filename', type=str, default='input')
     parser.add_argument('--outputpath', type=str, default='/opt/ml/processing/output/')
     
     return parser.parse_known_args()
@@ -20,7 +20,7 @@ if __name__=="__main__":
     # Process arguments
     args, _ = _parse_args()
     
-    target_col = "y"
+    target_col = "DC_POWER"
     
     # Load data
     df_gen1 = pd.read_csv(os.path.join(args.filepath, 'Plant_1_Generation_Data.csv'))
@@ -35,27 +35,33 @@ if __name__=="__main__":
     df_weather2['DATE_TIME'] = pd.to_datetime(df_weather2['DATE_TIME'], format='%Y-%m-%d %H:%M:%S')
     
     # Drop unnecessary columns and merge dataframes
-    df_plant = pd.merge(
-        df_gen1.drop(columns=['PLANT_ID']),
+    df_plant1 = pd.merge(
+        df_gen1.drop(columns=['PLANT_ID','AC_POWER','DAILY_YIELD']),
         df_weather1.drop(columns=['PLANT_ID', 'SOURCE_KEY']),
         on='DATE_TIME'
     )
     
-    df_plant = pd.merge(
-        df_plant,
-        df_gen2.drop(columns=['PLANT_ID']),
-        on='DATE_TIME'
-    )
-    
-    df_plant = pd.merge(
-        df_plant,
+    df_plant2 = pd.merge(
+        df_gen2.drop(columns=['PLANT_ID','AC_POWER','DAILY_YIELD']),
         df_weather2.drop(columns=['PLANT_ID', 'SOURCE_KEY']),
         on='DATE_TIME'
     )
     
+    combined_plant = pd.concat([df_plant1, df_plant2])
+    
+    # adding separate time and date columns
+    combined_plant["DATE"] = pd.to_datetime(combined_plant["DATE_TIME"]).dt.date # add new column with date
+    combined_plant["TIME"] = pd.to_datetime(combined_plant["DATE_TIME"]).dt.time # add new column with time
+
+    # add hours and minutes for ml models
+    combined_plant['HOURS'] = pd.to_datetime(combined_plant['TIME'],format='%H:%M:%S').dt.hour
+    combined_plant['MINUTES'] = pd.to_datetime(combined_plant['TIME'],format='%H:%M:%S').dt.minute
+    combined_plant['MINUTES_PASS'] = df_plant1['MINUTES'] + combined_plant['HOURS']*60
+    
+    
     # Shuffle and split the dataset
     train_data, validation_data, test_data = np.split(
-        df_plant.sample(frac=1, random_state=1729),
+        combined_plant.sample(frac=1, random_state=1729),
         [int(0.7 * len(df_plant)), int(0.9 * len(df_plant))],
     )
 
@@ -66,8 +72,9 @@ if __name__=="__main__":
     validation_data.to_csv(os.path.join(args.outputpath, 'validation/validation.csv'), index=False, header=False)
     test_data[target_col].to_csv(os.path.join(args.outputpath, 'test/test_y.csv'), index=False, header=False)
     test_data.drop([target_col], axis=1).to_csv(os.path.join(args.outputpath, 'test/test_x.csv'), index=False, header=False)
-    
+
+
     # Save the baseline dataset for model monitoring
-    df_plant.drop([target_col], axis=1).to_csv(os.path.join(args.outputpath, 'baseline/baseline.csv'), index=False, header=False)
+    combined_plant.drop([target_col], axis=1).to_csv(os.path.join(args.outputpath, 'baseline/baseline.csv'), index=False, header=False)
     
     print("## Processing complete. Exiting.")
