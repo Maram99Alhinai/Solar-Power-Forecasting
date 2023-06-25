@@ -1,0 +1,1119 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "id": "3b31de2a-10e6-4c1c-9c83-9c2de8ca92ef",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import sklearn\n",
+    "import pandas as pd\n",
+    "import boto3\n",
+    "import os\n",
+    "from sagemaker import get_execution_role\n",
+    "import sagemaker\n",
+    "import json\n",
+    "from sagemaker.workflow.pipeline_context import PipelineSession\n",
+    "from sagemaker.workflow.parameters import (\n",
+    "    ParameterInteger, \n",
+    "    ParameterFloat, \n",
+    "    ParameterString, \n",
+    "    ParameterBoolean\n",
+    ")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "ca27a761-7392-4723-a349-83ae729978a9",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "arn:aws:iam::567821811420:role/service-role/AmazonSageMaker-ExecutionRole-20230619T084765\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Get some variables you need to interact with SageMaker service\n",
+    "boto_session = boto3.Session()\n",
+    "region = boto_session.region_name\n",
+    "bucket_name = sagemaker.Session().default_bucket()\n",
+    "bucket_prefix = \"from-idea-to-prod/xgboost\"  \n",
+    "sm_session = sagemaker.Session()\n",
+    "sm_client = boto_session.client(\"sagemaker\")\n",
+    "sm_role = sagemaker.get_execution_role()\n",
+    "\n",
+    "initialized = True\n",
+    "\n",
+    "print(sm_role)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e38ec91f-1aa0-44b6-9489-bb7a8ce5a102",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Store some variables to keep the value between the notebooks\n",
+    "# %store bucket_name\n",
+    "# %store bucket_prefix\n",
+    "# %store sm_role\n",
+    "# %store region\n",
+    "# %store initialized"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "b4932f40-e70d-4d64-bd23-da7a6d3172a7",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "SageMaker domain id: d-ivd5gnez0yil\n",
+      "Stored 'domain_id' (str)\n"
+     ]
+    }
+   ],
+   "source": [
+    "NOTEBOOK_METADATA_FILE = \"/opt/ml/metadata/resource-metadata.json\"\n",
+    "domain_id = None\n",
+    "\n",
+    "if os.path.exists(NOTEBOOK_METADATA_FILE):\n",
+    "    with open(NOTEBOOK_METADATA_FILE, \"rb\") as f:\n",
+    "        domain_id = json.loads(f.read()).get('DomainId')\n",
+    "        print(f\"SageMaker domain id: {domain_id}\")\n",
+    "\n",
+    "%store domain_id"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "c19b48a7-58d4-4d91-bbd4-6a57294c704c",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "#read data and save it in pandas dataframe\n",
+    "df_gen1 = pd.read_csv(\"data/Plant_1_Generation_Data.csv\")\n",
+    "df_gen2 = pd.read_csv(\"data/Plant_2_Generation_Data.csv\")\n",
+    "\n",
+    "df_weather1 = pd.read_csv(\"data/Plant_1_Weather_Sensor_Data.csv\")\n",
+    "df_weather2 = pd.read_csv(\"data//Plant_2_Weather_Sensor_Data.csv\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "id": "ccbba575-e0b8-4fb1-9b09-cb70e1c5a886",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.jupyter.widget-view+json": {
+       "model_id": "07b31799ccc54dc1b21c7fc45cd63fcb"
+      },
+      "text/plain": [
+       "          DATE_TIME  PLANT_ID       SOURCE_KEY  DC_POWER  AC_POWER  \\\n",
+       "0  15-05-2020 00:00   4135001  1BY6WEcLGh8j5v7       0.0       0.0   \n",
+       "1  15-05-2020 00:00   4135001  1IF53ai7Xc0U56Y       0.0       0.0   \n",
+       "2  15-05-2020 00:00   4135001  3PZuoBAID5Wc2HD       0.0       0.0   \n",
+       "3  15-05-2020 00:00   4135001  7JYdWkrLSPkdwr4       0.0       0.0   \n",
+       "4  15-05-2020 00:00   4135001  McdE0feGgRqW7Ca       0.0       0.0   \n",
+       "\n",
+       "   DAILY_YIELD  TOTAL_YIELD  \n",
+       "0          0.0    6259559.0  \n",
+       "1          0.0    6183645.0  \n",
+       "2          0.0    6987759.0  \n",
+       "3          0.0    7602960.0  \n",
+       "4          0.0    7158964.0  "
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "df_gen1.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "id": "23bc5cf2-8d7f-449d-a83a-cc5217f5501b",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# Run this cell to import or install the Data Wrangler widget to show automatic visualization and generate code to fix data quality issues\n",
+    "try:\n",
+    "    import sagemaker_datawrangler\n",
+    "except ImportError:\n",
+    "    !pip install --upgrade sagemaker-datawrangler\n",
+    "    import sagemaker_datawrangler\n",
+    "\n",
+    "# Display Pandas DataFrame to view the widget: df, display(df), df.sample()... "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "04117339-8b30-46da-84ef-e1eb30c5aae5",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "make_bucket failed: s3://sagemaker-eu-central-1-d48 An error occurred (BucketAlreadyOwnedByYou) when calling the CreateBucket operation: Your previous request to create the named bucket succeeded and you already own it.\n"
+     ]
+    }
+   ],
+   "source": [
+    "#create S3 bucket \n",
+    "!aws s3 mb s3://sagemaker-eu-central-1-d48\n",
+    "bucket_name='sagemaker-eu-central-1-d48'\n",
+    "bucket_prefix='solar1/linerreg'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "86f014ce-bfee-45ec-94b0-783847cada9f",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# Set names of pipeline objects\n",
+    "project = \"solar1\"\n",
+    "\n",
+    "pipeline_name = f\"{project}-pipeline\"\n",
+    "pipeline_model_name = f\"{project}-model-reg\"\n",
+    "model_package_group_name = f\"{project}-model-group\"\n",
+    "endpoint_config_name = f\"{project}-endpoint-config\"\n",
+    "endpoint_name = f\"{project}-endpoint\"\n",
+    "\n",
+    "# Set instance types and counts\n",
+    "process_instance_type = \"ml.c5.xlarge\"\n",
+    "train_instance_count = 1\n",
+    "train_instance_type = \"ml.m5.xlarge\"\n",
+    "\n",
+    "# Set S3 urls for processed data\n",
+    "train_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/train\"\n",
+    "validation_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/validation\"\n",
+    "test_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/test\"\n",
+    "baseline_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/baseline\"\n",
+    "\n",
+    "evaluation_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/evaluation\"\n",
+    "prediction_baseline_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/prediction_baseline\"\n",
+    "\n",
+    "output_s3_url = f\"s3://{bucket_name}/{bucket_prefix}/output\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "261541f6-eea0-47f7-bd0d-289fcb640bd4",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Stored 'train_s3_url' (str)\n",
+      "Stored 'validation_s3_url' (str)\n",
+      "Stored 'test_s3_url' (str)\n",
+      "Stored 'baseline_s3_url' (str)\n",
+      "Stored 'model_package_group_name' (str)\n",
+      "Stored 'evaluation_s3_url' (str)\n",
+      "Stored 'prediction_baseline_s3_url' (str)\n",
+      "Stored 'output_s3_url' (str)\n"
+     ]
+    }
+   ],
+   "source": [
+    "#store the variable\n",
+    "# %store train_s3_url\n",
+    "# %store validation_s3_url\n",
+    "# %store test_s3_url\n",
+    "# %store baseline_s3_url\n",
+    "# %store model_package_group_name\n",
+    "# %store evaluation_s3_url\n",
+    "# %store prediction_baseline_s3_url\n",
+    "# %store output_s3_url"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 34,
+   "id": "9a5442f6-b0c6-469d-af61-15786d11ab76",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# Set instance types and counts\n",
+    "process_instance_type = \"ml.c5.xlarge\"\n",
+    "train_instance_count = 1\n",
+    "train_instance_type = \"ml.m5.xlarge\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "ea8d50f9-0ecf-494e-b01d-457f9f84eb0a",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Upload complete.\n"
+     ]
+    }
+   ],
+   "source": [
+    "#Upload data to S3 bucket\n",
+    "s3 = boto3.client('s3')\n",
+    "\n",
+    "# Upload Plant_1_Generation_Data.csv\n",
+    "s3.upload_file(\"data/Plant_1_Generation_Data.csv\", bucket_name, \"input/Plant_1_Generation_Data.csv\")\n",
+    "\n",
+    "# Upload Plant_2_Generation_Data.csv\n",
+    "s3.upload_file(\"data/Plant_2_Generation_Data.csv\", bucket_name, \"input/Plant_2_Generation_Data.csv\")\n",
+    "\n",
+    "# Upload Plant_1_Weather_Sensor_Data.csv\n",
+    "s3.upload_file(\"data/Plant_1_Weather_Sensor_Data.csv\", bucket_name, \"input/Plant_1_Weather_Sensor_Data.csv\")\n",
+    "\n",
+    "# Upload Plant_2_Weather_Sensor_Data.csv\n",
+    "s3.upload_file(\"data/Plant_2_Weather_Sensor_Data.csv\", bucket_name, \"input/Plant_2_Weather_Sensor_Data.csv\")\n",
+    "\n",
+    "print(\"Upload complete.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "id": "816e26b2-4065-4ccf-acac-9a3dd940e434",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Upload complete.\n"
+     ]
+    }
+   ],
+   "source": [
+    "\n",
+    "try:\n",
+    "    input_s3_url\n",
+    "except NameError:      \n",
+    "    # If input_s3_url is not defined, upload the datasets to S3 and store the paths\n",
+    "    input_s3_url_gen1 = sagemaker.Session().upload_data(\n",
+    "        path=\"data/Plant_1_Generation_Data.csv\",\n",
+    "        bucket=bucket_name,\n",
+    "        key_prefix=f\"{bucket_prefix}/input\"\n",
+    "    )\n",
+    "    input_s3_url_gen2 = sagemaker.Session().upload_data(\n",
+    "        path=\"data/Plant_2_Generation_Data.csv\",\n",
+    "        bucket=bucket_name,\n",
+    "        key_prefix=f\"{bucket_prefix}/input\"\n",
+    "    )\n",
+    "    input_s3_url_weather1 = sagemaker.Session().upload_data(\n",
+    "        path=\"data/Plant_1_Weather_Sensor_Data.csv\",\n",
+    "        bucket=bucket_name,\n",
+    "        key_prefix=f\"{bucket_prefix}/input\"\n",
+    "    )\n",
+    "    input_s3_url_weather2 = sagemaker.Session().upload_data(\n",
+    "        path=\"data/Plant_2_Weather_Sensor_Data.csv\",\n",
+    "        bucket=bucket_name,\n",
+    "        key_prefix=f\"{bucket_prefix}/input\"\n",
+    "    )\n",
+    "    print(\"Upload complete.\")\n",
+    "\n",
+    "    # %store input_s3_url_gen1\n",
+    "    # %store input_s3_url_gen2\n",
+    "    # %store input_s3_url_weather1\n",
+    "    # %store input_s3_url_weather2\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 38,
+   "id": "a4d06a06-761d-40d1-bbfe-769b9ca97157",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "##Create pipeline\n",
+    "##Setup pipeline parameters"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 36,
+   "id": "8713d926-5a17-4c83-9700-570e0d5c2d0f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Set processing instance type\n",
+    "process_instance_type_param = ParameterString(\n",
+    "    name=\"ProcessingInstanceType\",\n",
+    "    default_value=process_instance_type,\n",
+    ")\n",
+    "\n",
+    "# Set training instance type\n",
+    "train_instance_type_param = ParameterString(\n",
+    "    name=\"TrainingInstanceType\",\n",
+    "    default_value=train_instance_type,\n",
+    ")\n",
+    "\n",
+    "# Set training instance count\n",
+    "train_instance_count_param = ParameterInteger(\n",
+    "    name=\"TrainingInstanceCount\",\n",
+    "    default_value=train_instance_count\n",
+    ")\n",
+    "\n",
+    "# Set model approval param\n",
+    "model_approval_status_param = ParameterString(\n",
+    "    name=\"ModelApprovalStatus\",\n",
+    "    default_value=\"PendingManualApproval\"\n",
+    ")\n",
+    "\n",
+    "# Minimal threshold for model performance on the test dataset\n",
+    "test_score_threshold_param = ParameterFloat(\n",
+    "    name=\"TestScoreThreshold\", \n",
+    "    default_value=0.75\n",
+    ")\n",
+    "\n",
+    "# Set S3 url for input dataset\n",
+    "input_s3_url_param = ParameterString(\n",
+    "    name=\"InputDataUrl\",\n",
+    "    default_value=input_s3_url_gen1,\n",
+    ")\n",
+    "\n",
+    "input_s3_url_param = ParameterString(\n",
+    "    name=\"InputDataUrl\",\n",
+    "    default_value=input_s3_url_gen2,\n",
+    ")\n",
+    "\n",
+    "input_s3_url_param = ParameterString(\n",
+    "    name=\"InputDataUrl\",\n",
+    "    default_value=input_s3_url_weather1,\n",
+    ")\n",
+    "\n",
+    "input_s3_url_param = ParameterString(\n",
+    "    name=\"InputDataUrl\",\n",
+    "    default_value=input_s3_url_weather2,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "id": "85338988-5ea4-4053-9890-b411abc13d90",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "session = PipelineSession()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a0729c40-50bc-4582-be7a-1e66dda57cfb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%writefile preprocessing.py"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "19d3fede-8995-458a-9880-0e69b1dea719",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "sklearn_processor = SKLearnProcessor(\n",
+    "        framework_version=\"0.23-1\",\n",
+    "        role=sm_role,\n",
+    "        instance_type=process_instance_type_param,\n",
+    "        instance_count=1,\n",
+    "        base_job_name=f\"{pipeline_name}/preprocess\",\n",
+    "        sagemaker_session=session,\n",
+    "    )\n",
+    "    \n",
+    "processing_inputs=[\n",
+    "    ProcessingInput(source=input_s3_url_param, destination=\"/opt/ml/processing/input\")\n",
+    "]\n",
+    "\n",
+    "processing_outputs=[\n",
+    "    ProcessingOutput(output_name=\"train_data\", source=\"/opt/ml/processing/output/train\", \n",
+    "                     destination=train_s3_url),\n",
+    "    ProcessingOutput(output_name=\"validation_data\", source=\"/opt/ml/processing/output/validation\",\n",
+    "                     destination=validation_s3_url),\n",
+    "    ProcessingOutput(output_name=\"test_data\", source=\"/opt/ml/processing/output/test\",\n",
+    "                     destination=test_s3_url),\n",
+    "    ProcessingOutput(output_name=\"baseline_data\", source=\"/opt/ml/processing/output/baseline\", \n",
+    "                     destination=baseline_s3_url),\n",
+    "]\n",
+    "\n",
+    "processor_args = sklearn_processor.run(\n",
+    "    inputs=processing_inputs,\n",
+    "    outputs=processing_outputs,\n",
+    "    code='preprocessing.py',\n",
+    "    # arguments = ['arg1', 'arg2'],\n",
+    ")\n",
+    "    \n",
+    "# Define processing step\n",
+    "step_process = ProcessingStep(\n",
+    "    name=f\"{pipeline_name}-preprocess-data\",\n",
+    "    step_args=processor_args,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "id": "d5fd44b0-bba3-4fd3-9ac0-9e3084c0a343",
+   "metadata": {
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "LinearRegression_image_uri = sagemaker.image_uris.retrieve(framework='linear-learner',region=region)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2c806049-c7b7-4225-8706-b3a59a862481",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "availableInstances": [
+   {
+    "_defaultOrder": 0,
+    "_isFastLaunch": true,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 4,
+    "name": "ml.t3.medium",
+    "vcpuNum": 2
+   },
+   {
+    "_defaultOrder": 1,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 8,
+    "name": "ml.t3.large",
+    "vcpuNum": 2
+   },
+   {
+    "_defaultOrder": 2,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.t3.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 3,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.t3.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 4,
+    "_isFastLaunch": true,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 8,
+    "name": "ml.m5.large",
+    "vcpuNum": 2
+   },
+   {
+    "_defaultOrder": 5,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.m5.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 6,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.m5.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 7,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 64,
+    "name": "ml.m5.4xlarge",
+    "vcpuNum": 16
+   },
+   {
+    "_defaultOrder": 8,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 128,
+    "name": "ml.m5.8xlarge",
+    "vcpuNum": 32
+   },
+   {
+    "_defaultOrder": 9,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 192,
+    "name": "ml.m5.12xlarge",
+    "vcpuNum": 48
+   },
+   {
+    "_defaultOrder": 10,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 256,
+    "name": "ml.m5.16xlarge",
+    "vcpuNum": 64
+   },
+   {
+    "_defaultOrder": 11,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 384,
+    "name": "ml.m5.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 12,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 8,
+    "name": "ml.m5d.large",
+    "vcpuNum": 2
+   },
+   {
+    "_defaultOrder": 13,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.m5d.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 14,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.m5d.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 15,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 64,
+    "name": "ml.m5d.4xlarge",
+    "vcpuNum": 16
+   },
+   {
+    "_defaultOrder": 16,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 128,
+    "name": "ml.m5d.8xlarge",
+    "vcpuNum": 32
+   },
+   {
+    "_defaultOrder": 17,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 192,
+    "name": "ml.m5d.12xlarge",
+    "vcpuNum": 48
+   },
+   {
+    "_defaultOrder": 18,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 256,
+    "name": "ml.m5d.16xlarge",
+    "vcpuNum": 64
+   },
+   {
+    "_defaultOrder": 19,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 384,
+    "name": "ml.m5d.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 20,
+    "_isFastLaunch": false,
+    "category": "General purpose",
+    "gpuNum": 0,
+    "hideHardwareSpecs": true,
+    "memoryGiB": 0,
+    "name": "ml.geospatial.interactive",
+    "supportedImageNames": [
+     "sagemaker-geospatial-v1-0"
+    ],
+    "vcpuNum": 0
+   },
+   {
+    "_defaultOrder": 21,
+    "_isFastLaunch": true,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 4,
+    "name": "ml.c5.large",
+    "vcpuNum": 2
+   },
+   {
+    "_defaultOrder": 22,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 8,
+    "name": "ml.c5.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 23,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.c5.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 24,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.c5.4xlarge",
+    "vcpuNum": 16
+   },
+   {
+    "_defaultOrder": 25,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 72,
+    "name": "ml.c5.9xlarge",
+    "vcpuNum": 36
+   },
+   {
+    "_defaultOrder": 26,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 96,
+    "name": "ml.c5.12xlarge",
+    "vcpuNum": 48
+   },
+   {
+    "_defaultOrder": 27,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 144,
+    "name": "ml.c5.18xlarge",
+    "vcpuNum": 72
+   },
+   {
+    "_defaultOrder": 28,
+    "_isFastLaunch": false,
+    "category": "Compute optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 192,
+    "name": "ml.c5.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 29,
+    "_isFastLaunch": true,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.g4dn.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 30,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.g4dn.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 31,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 64,
+    "name": "ml.g4dn.4xlarge",
+    "vcpuNum": 16
+   },
+   {
+    "_defaultOrder": 32,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 128,
+    "name": "ml.g4dn.8xlarge",
+    "vcpuNum": 32
+   },
+   {
+    "_defaultOrder": 33,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 4,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 192,
+    "name": "ml.g4dn.12xlarge",
+    "vcpuNum": 48
+   },
+   {
+    "_defaultOrder": 34,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 256,
+    "name": "ml.g4dn.16xlarge",
+    "vcpuNum": 64
+   },
+   {
+    "_defaultOrder": 35,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 61,
+    "name": "ml.p3.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 36,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 4,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 244,
+    "name": "ml.p3.8xlarge",
+    "vcpuNum": 32
+   },
+   {
+    "_defaultOrder": 37,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 8,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 488,
+    "name": "ml.p3.16xlarge",
+    "vcpuNum": 64
+   },
+   {
+    "_defaultOrder": 38,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 8,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 768,
+    "name": "ml.p3dn.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 39,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.r5.large",
+    "vcpuNum": 2
+   },
+   {
+    "_defaultOrder": 40,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.r5.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 41,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 64,
+    "name": "ml.r5.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 42,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 128,
+    "name": "ml.r5.4xlarge",
+    "vcpuNum": 16
+   },
+   {
+    "_defaultOrder": 43,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 256,
+    "name": "ml.r5.8xlarge",
+    "vcpuNum": 32
+   },
+   {
+    "_defaultOrder": 44,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 384,
+    "name": "ml.r5.12xlarge",
+    "vcpuNum": 48
+   },
+   {
+    "_defaultOrder": 45,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 512,
+    "name": "ml.r5.16xlarge",
+    "vcpuNum": 64
+   },
+   {
+    "_defaultOrder": 46,
+    "_isFastLaunch": false,
+    "category": "Memory Optimized",
+    "gpuNum": 0,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 768,
+    "name": "ml.r5.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 47,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 16,
+    "name": "ml.g5.xlarge",
+    "vcpuNum": 4
+   },
+   {
+    "_defaultOrder": 48,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 32,
+    "name": "ml.g5.2xlarge",
+    "vcpuNum": 8
+   },
+   {
+    "_defaultOrder": 49,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 64,
+    "name": "ml.g5.4xlarge",
+    "vcpuNum": 16
+   },
+   {
+    "_defaultOrder": 50,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 128,
+    "name": "ml.g5.8xlarge",
+    "vcpuNum": 32
+   },
+   {
+    "_defaultOrder": 51,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 1,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 256,
+    "name": "ml.g5.16xlarge",
+    "vcpuNum": 64
+   },
+   {
+    "_defaultOrder": 52,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 4,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 192,
+    "name": "ml.g5.12xlarge",
+    "vcpuNum": 48
+   },
+   {
+    "_defaultOrder": 53,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 4,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 384,
+    "name": "ml.g5.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 54,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 8,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 768,
+    "name": "ml.g5.48xlarge",
+    "vcpuNum": 192
+   },
+   {
+    "_defaultOrder": 55,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 8,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 1152,
+    "name": "ml.p4d.24xlarge",
+    "vcpuNum": 96
+   },
+   {
+    "_defaultOrder": 56,
+    "_isFastLaunch": false,
+    "category": "Accelerated computing",
+    "gpuNum": 8,
+    "hideHardwareSpecs": false,
+    "memoryGiB": 1152,
+    "name": "ml.p4de.24xlarge",
+    "vcpuNum": 96
+   }
+  ],
+  "kernelspec": {
+   "display_name": "Python 3 (Data Science)",
+   "language": "python",
+   "name": "python3__SAGEMAKER_INTERNAL__arn:aws:sagemaker:us-east-1:081325390199:image/datascience-1.0"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.10"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
