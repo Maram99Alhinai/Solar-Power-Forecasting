@@ -102218,7 +102218,7 @@
       ]
     },
     {
-      "node_id": "c816f398-a386-4130-9e61-c3d08ee2d721",
+      "node_id": "c3216d0e-8a7f-4b34-8862-49874d5752dc",
       "type": "TRANSFORM",
       "operator": "sagemaker.spark.handle_outliers_0.1",
       "parameters": {
@@ -102227,21 +102227,45 @@
           "input_column": [
             "IRRADIATION"
           ],
-          "standard_deviations": 4,
+          "standard_deviations": 3,
           "fix_method": "Remove"
         }
       },
       "trained_parameters": {
         "standard_deviation_numeric_outliers_parameters": {
-          "_hash": "10b2dff28011403357a5a7dd4a37e9bea91721a8",
-          "lower_threshold": -1.0033542149579087,
-          "upper_threshold": 1.482063798249483
+          "_hash": "78ee0f3f8ca6533171e922e81df81705c14f6a86",
+          "lower_threshold": -0.6926769633069848,
+          "upper_threshold": 1.1713865465985591
         }
       },
       "inputs": [
         {
           "name": "df",
           "node_id": "140902e8-e558-416c-91e2-30264f641a4a",
+          "output_name": "default"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "default"
+        }
+      ]
+    },
+    {
+      "node_id": "2280ba6c-8042-4ee7-bba9-1879ba17a2f2",
+      "type": "VISUALIZATION",
+      "operator": "sagemaker.visualizations.scatterplot_0.1",
+      "parameters": {
+        "name": "TIme",
+        "x_axis": "TIME",
+        "y_axis": "IRRADIATION",
+        "color_by": "HOURS",
+        "facet_by": "MONTH"
+      },
+      "inputs": [
+        {
+          "name": "df",
+          "node_id": "c3216d0e-8a7f-4b34-8862-49874d5752dc",
           "output_name": "default"
         }
       ],
