@@ -36,13 +36,13 @@ if __name__=="__main__":
     
     # Drop unnecessary columns and merge dataframes
     df_plant1 = pd.merge(
-        df_gen1.drop(columns=['PLANT_ID','AC_POWER','DAILY_YIELD']),
+        df_gen1.drop(columns=['PLANT_ID','AC_POWER','TOTAL_YIELD']),
         df_weather1.drop(columns=['PLANT_ID', 'SOURCE_KEY']),
         on='DATE_TIME'
     )
     
     df_plant2 = pd.merge(
-        df_gen2.drop(columns=['PLANT_ID','AC_POWER','DAILY_YIELD']),
+        df_gen2.drop(columns=['PLANT_ID','AC_POWER','TOTAL_YIELD']),
         df_weather2.drop(columns=['PLANT_ID', 'SOURCE_KEY']),
         on='DATE_TIME'
     )
