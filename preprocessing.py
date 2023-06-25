@@ -57,6 +57,24 @@ if __name__=="__main__":
     combined_plant['HOURS'] = pd.to_datetime(combined_plant['TIME'],format='%H:%M:%S').dt.hour
     combined_plant['MINUTES'] = pd.to_datetime(combined_plant['TIME'],format='%H:%M:%S').dt.minute
     combined_plant['MINUTES_PASS'] = df_plant1['MINUTES'] + combined_plant['HOURS']*60
+
+    data_folder = "/data"  # Specify the data folder path
+
+    # Check if the data folder exists; if not, create it
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+
+    combined_plant_file = os.path.join(data_folder, "combined_plant.csv")
+
+    # Save the combined_plant DataFrame to the data folder if the file does not exist
+    if not os.path.exists(combined_plant_file):
+        combined_plant.to_csv(combined_plant_file, index=False)
+        print(f"combined_plant.csv saved to {combined_plant_file}")
+    else:
+        print(f"combined_plant.csv already exists in {combined_plant_file}. Skipping saving.")
+
+    print("## Processing complete. Exiting.")
+
     
     
     # Shuffle and split the dataset
