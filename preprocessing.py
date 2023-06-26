@@ -5,8 +5,8 @@ import argparse
 import os
 
 
-input_url = "s3://sagemaker-us-east-1-531485126105/Group-project/Solar1/processing/input/"
-output_url = "s3://sagemaker-us-east-1-531485126105/Group-project/Solar1/processing/output/"
+input_url = f"s3://{bucket_name}/Group-project/Solar1/processing/input/"
+output_url = f"s3://{bucket_name}/Group-project/Solar1/processing/output/"
 
 def _parse_args():
     
