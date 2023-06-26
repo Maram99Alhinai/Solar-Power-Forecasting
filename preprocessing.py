@@ -31,38 +31,30 @@ if __name__=="__main__":
     # Adjust datetime format
     df_gen1['DATE_TIME'] = pd.to_datetime(df_gen1['DATE_TIME'], format='%d-%m-%Y %H:%M')
     df_weather1['DATE_TIME'] = pd.to_datetime(df_weather1['DATE_TIME'], format='%Y-%m-%d %H:%M:%S')
-    df_gen2['DATE_TIME'] = pd.to_datetime(df_gen2['DATE_TIME'], format='%d-%m-%Y %H:%M')
+    df_gen2['DATE_TIME'] = pd.to_datetime(df_gen2['DATE_TIME'], format='%Y-%m-%d %H:%M:%S')  # Updated format
     df_weather2['DATE_TIME'] = pd.to_datetime(df_weather2['DATE_TIME'], format='%Y-%m-%d %H:%M:%S')
-    
+
     # Drop unnecessary columns and merge dataframes
     df_plant1 = pd.merge(
         df_gen1.drop(columns=['PLANT_ID','AC_POWER','TOTAL_YIELD']),
         df_weather1.drop(columns=['PLANT_ID', 'SOURCE_KEY']),
         on='DATE_TIME'
     )
-    
+
     df_plant2 = pd.merge(
         df_gen2.drop(columns=['PLANT_ID','AC_POWER','TOTAL_YIELD']),
         df_weather2.drop(columns=['PLANT_ID', 'SOURCE_KEY']),
         on='DATE_TIME'
     )
-    
-    combined_plant = pd.concat([df_plant1, df_plant2])
-    
-    # adding separate time and date columns
-    combined_plant["DATE"] = pd.to_datetime(combined_plant["DATE_TIME"]).dt.date # add new column with date
-    combined_plant["TIME"] = pd.to_datetime(combined_plant["DATE_TIME"]).dt.time # add new column with time
 
-    # add hours and minutes for ml models
-    combined_plant['HOURS'] = pd.to_datetime(combined_plant['TIME'],format='%H:%M:%S').dt.hour
-    combined_plant['MINUTES'] = pd.to_datetime(combined_plant['TIME'],format='%H:%M:%S').dt.minute
-    combined_plant['MINUTES_PASS'] = df_plant1['MINUTES'] + combined_plant['HOURS']*60
+    combined_plant = pd.concat([df_plant1, df_plant2])
+    combined_plant.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
     
     
     # Shuffle and split the dataset
     train_data, validation_data, test_data = np.split(
         combined_plant.sample(frac=1, random_state=1729),
-        [int(0.7 * len(df_plant)), int(0.9 * len(df_plant))],
+        [int(0.7 * len(combined_plant)), int(0.9 * len(combined_plant))],
     )
 
     print(f"Data split > train:{train_data.shape} | validation:{validation_data.shape} | test:{test_data.shape}")

@@ -1,6 +1,6 @@
 
-import xgboost as xgb
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression
 
 if __name__ == "__main__":   
     
@@ -16,17 +16,18 @@ if __name__ == "__main__":
         t.extractall(path=".")
     
     # Load model
-    model = linear.Booster()
-    model.load_model("linear-model")
+    loaded_model = joblib.load("linear_regression_model.pkl")
     
     # Read test data
     X_test = pd.read_csv(test_x_path, header=None).values
     y_test = pd.read_csv(test_y_path, header=None).to_numpy()
 
     # Run predictions
-    predictions = model.predict(X_test)
+    test_features_numeric = X_test.drop(['DATE_TIME', 'SOURCE_KEY'], axis=1)
+    predictions = model.predict(test_features_numeric)
 
     # Calculate RMSE
+    test_label = pd.DataFrame(y_test)
     rmse = np.sqrt(mean_squared_error(y_test, predictions))
     
     # Calculate R2 score
@@ -36,9 +37,7 @@ if __name__ == "__main__":
         "regression_metrics": {
             "rmse": {
                 "value": rmse,
-            },
-            "r2_score": {
-                "value": r2,
+       
             },
         },
     }
