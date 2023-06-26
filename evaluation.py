@@ -5,11 +5,11 @@ from sklearn.metrics import mean_squared_error, r2_score
 if __name__ == "__main__":   
     
     # All paths are local for the processing container
-    model_path = "/opt/ml/processing/model/model.tar.gz"
-    test_x_path = "/opt/ml/processing/test/test_x.csv"
-    test_y_path = "/opt/ml/processing/test/test_y.csv"
-    output_dir = "/opt/ml/processing/evaluation"
-    output_prediction_path = "/opt/ml/processing/output/"
+    model_path = f"{prefix}/processing/model/model.tar.gz"
+    test_x_path = f"{prefix}processing/test/test_x.csv"
+    test_y_path = f"{prefix}/processing/test/test_y.csv"
+    output_dir = f"{prefix}/processing/evaluation"
+    output_prediction_path = f"{prefix}/processing/output/"
         
     # Read model tar file
     with tarfile.open(model_path, "r:gz") as t:
