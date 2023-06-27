@@ -25,7 +25,7 @@ if __name__=="__main__":
     # # Load data
     df_model_data = pd.read_csv(os.path.join(args.filepath, args.filename))
     
-    combined_plant.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
+    df_model_data.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
     
     print(df_model_data.columns)
     print(df_model_data.head(5))
