@@ -1,6 +1,16 @@
 
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
+import json
+import os
+import pathlib
+import pickle as pkl
+import tarfile
+import joblib
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+import datetime as dt
 
 if __name__ == "__main__":   
     
@@ -16,10 +26,11 @@ if __name__ == "__main__":
         t.extractall(path=".")
     
     # Load model
-    loaded_model = joblib.load("linear_regression_model.pkl")
+    model = xgb.Booster()
+    model.load_model("gblinear-model")
     
     # Read test data
-    X_test = pd.read_csv(test_x_path, header=None).values
+    X_test = xgb.DMatrix(pd.read_csv(test_x_path, header=None).values)
     y_test = pd.read_csv(test_y_path, header=None).to_numpy()
 
     # Run predictions
@@ -27,11 +38,9 @@ if __name__ == "__main__":
     predictions = model.predict(test_features_numeric)
 
     # Calculate RMSE
-    test_label = pd.DataFrame(y_test)
-    rmse = np.sqrt(mean_squared_error(y_test, predictions))
+    rmse = np.sqrt(mean_squared_error(y_test,predictions))
     
-    # Calculate R2 score
-    r2 = r2_score(y_test, predictions)
+
     
     report_dict = {
         "regression_metrics": {
@@ -42,12 +51,13 @@ if __name__ == "__main__":
         },
     }
 
-    # Save evaluation report
+  # Save evaluation report
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
     with open(f"{output_dir}/evaluation.json", "w") as f:
         f.write(json.dumps(report_dict))
     
     # Save prediction baseline file - we need it later for the model quality monitoring
-    pd.DataFrame({"prediction": predictions,
-                  "label": y_test.squeeze()}
+    pd.DataFrame({"prediction":np.array(np.round(probability), dtype=int),
+                  "probability":probability,
+                  "label":y_test.squeeze()}
                 ).to_csv(os.path.join(output_prediction_path, 'prediction_baseline/prediction_baseline.csv'), index=False, header=True)
