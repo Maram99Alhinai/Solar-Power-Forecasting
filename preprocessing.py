@@ -23,12 +23,11 @@ if __name__=="__main__":
     target_col = 'DC_POWER'
     
     # Load data
-    df_model_data = pd.read_csv(os.path.join(args.filepath, args.filename), sep=";")
-    # print(df_model_data.columns)
-    # print(df_model_data.head(5))
+    df_model_data = pd.read_csv(os.path.join(args.filepath, args.filename), sep=",")
+    print(df_model_data.columns)
+    print(df_model_data.head(5))
 
-    #df_model_data.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
-    
+    df_model_data.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
     
      # Shuffle and splitting dataset
     train_data, validation_data, test_data = np.split(
