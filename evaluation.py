@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     # Run predictions
     test_features_numeric = X_test.drop(['DATE_TIME', 'SOURCE_KEY'], axis=1)
-    predictions = model.predict(test_features_numeric)
+    predictions = model.predict("DC_POWER")
 
     # Calculate RMSE
     rmse = np.sqrt(mean_squared_error(y_test,predictions))
