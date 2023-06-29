@@ -27,7 +27,10 @@ if __name__=="__main__":
     print(df_model_data.columns)
     print(df_model_data.head(5))
 
-    df_model_data.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
+    df_model_data = df_model_data.drop(['SOURCE_KEY', 'DATE_TIME'], axis=1)
+    print("after dropped")
+    print(df_model_data.columns)
+    print(df_model_data.head(5))
     
      # Shuffle and splitting dataset
     train_data, validation_data, test_data = np.split(

@@ -1,4 +1,5 @@
 
+from sklearn import metrics 
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
 import json
@@ -27,21 +28,22 @@ if __name__ == "__main__":
     
     # Load model
     model = xgb.Booster()
-    model.load_model("gblinear-model")
+    model.load_model("xgboost-model")
+    print("model loaded")
     
     # Read test data
     X_test = xgb.DMatrix(pd.read_csv(test_x_path, header=None).values)
     y_test = pd.read_csv(test_y_path, header=None).to_numpy()
-
+    
     # Run predictions
-    test_features_numeric = X_test.drop(['DATE_TIME', 'SOURCE_KEY'], axis=1)
-    predictions = model.predict("DC_POWER")
+    # test_features_numeric = X_test.drop(['DATE_TIME', 'SOURCE_KEY'], axis=1)
+    predictions = model.predict(X_test)
 
     # Calculate RMSE
-    rmse = np.sqrt(mean_squared_error(y_test,predictions))
-    
+    # rmse = np.sqrt(mean_squared_error(y_test,predictions))
+    rmse = np.sqrt(metrics.mean_squared_error(y_test, predictions))
 
-    
+
     report_dict = {
         "regression_metrics": {
             "rmse": {
@@ -57,7 +59,7 @@ if __name__ == "__main__":
         f.write(json.dumps(report_dict))
     
     # Save prediction baseline file - we need it later for the model quality monitoring
-    pd.DataFrame({"prediction":np.array(np.round(probability), dtype=int),
-                  "probability":probability,
+    pd.DataFrame({"prediction":np.array(np.round(rmse), dtype=int),
+                  "rmse":rmse,
                   "label":y_test.squeeze()}
                 ).to_csv(os.path.join(output_prediction_path, 'prediction_baseline/prediction_baseline.csv'), index=False, header=True)
