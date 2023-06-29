@@ -59,7 +59,7 @@ if __name__ == "__main__":
         f.write(json.dumps(report_dict))
     
     # Save prediction baseline file - we need it later for the model quality monitoring
-    pd.DataFrame({"prediction":np.array(np.round(rmse), dtype=int),
+    pd.DataFrame({"prediction":np.array(np.round(predictions), dtype=int),
                   "rmse":rmse,
                   "label":y_test.squeeze()}
                 ).to_csv(os.path.join(output_prediction_path, 'prediction_baseline/prediction_baseline.csv'), index=False, header=True)
